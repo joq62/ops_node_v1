@@ -18,6 +18,18 @@
 
 -define(Id_c1,"c1").
 
+-define(SourceDir,"./test/specs").
+-define(DestDir,".").
+-define(SpecFiles,["spec.deployment","spec.cluster","spec.host","spec.application"]).
+
+-define(SourceDepFile,"./test/specs/spec.deployment").
+-define(DepFile,"spec.deployment").
+-define(SourceClusterFile,"./test/specs/spec.cluster").
+-define(ClusterFile,"spec.cluster").
+-define(SourceHostFile,"./test/specs/spec.host").
+-define(HostFile,"spec.host").
+-define(SourceApplicationFile,"./test/specs/spec.application").
+-define(ApplicationFile,"spec.application").
 
 		 
 
@@ -36,13 +48,37 @@ start()->
     ok=setup(),
 
     ok=create_node(),
-    timer:sleep(5000),
+    ok=copy_spec_files(),
+
+    ok=delete_spec_files(),
     ok=delete_node(),
  %   ok=pod_candidates(),
   
     io:format("Test OK !!! ~p~n",[?MODULE]),
     init:stop(),
     ok.
+
+%% --------------------------------------------------------------------
+%% Function: available_hosts()
+%% Description: Based on hosts.config file checks which hosts are avaible
+%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
+%% --------------------------------------------------------------------
+copy_spec_files()->
+
+    io:format("Start ~p~n",[?FUNCTION_NAME]),
+
+    Cookie=config_node:cluster_cookie(?ClusterName),    
+    Node=list_to_atom(?ClusterName++"@"++?HostName),
+    
+    R1=[{FileName,dist_lib:rm_file(Node,Cookie,?DestDir,FileName)}||FileName<-?SpecFiles],
+    io:format("R1 ~p~n",[R1]),
+    R2=[{FileName,dist_lib:cp_file(Node,Cookie,?SourceDir,FileName,?DestDir)}||FileName<-?SpecFiles],
+    io:format("R2 ~p~n",[R2]),
+
+
+    io:format("Stop OK !!! ~p~n",[?FUNCTION_NAME]),
+    ok.
+    
 
 %% --------------------------------------------------------------------
 %% Function: available_hosts()
@@ -77,6 +113,24 @@ create_node()->
 
     io:format("Stop OK !!! ~p~n",[?FUNCTION_NAME]),
     ok.
+
+%% --------------------------------------------------------------------
+%% Function: available_hosts()
+%% Description: Based on hosts.config file checks which hosts are avaible
+%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
+%% --------------------------------------------------------------------
+
+delete_spec_files()->
+    io:format("Start ~p~n",[?FUNCTION_NAME]),
+    
+    Cookie=config_node:cluster_cookie(?ClusterName),    
+    Node=list_to_atom(?ClusterName++"@"++?HostName),
+    ClusterDir=config_node:cluster_dir(?ClusterName),
+    
+    R1=[{FileName,dist_lib:rm_file(Node,Cookie,?DestDir,FileName)}||FileName<-?SpecFiles],
+    io:format("Delete R1 ~p~n",[R1]),      
+    io:format("Stop OK !!! ~p~n",[?FUNCTION_NAME]),
+    ok.
 %% --------------------------------------------------------------------
 %% Function: available_hosts()
 %% Description: Based on hosts.config file checks which hosts are avaible
@@ -89,6 +143,8 @@ delete_node()->
     Node=list_to_atom(?ClusterName++"@"++?HostName),
     ClusterDir=config_node:cluster_dir(?ClusterName),
     
+    R1=[{FileName,dist_lib:rm_file(Node,Cookie,?DestDir,FileName)}||FileName<-?SpecFiles],
+
     ok=misc_cluster:delete_cluster_node(?HostName,?ClusterName),
  
        
@@ -107,14 +163,7 @@ delete_node()->
 %% Description: Based on hosts.config file checks which hosts are avaible
 %% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
 %% --------------------------------------------------------------------
--define(SourceDepFile,"./test/specs/spec.deployment").
--define(DepFile,"spec.deployment").
--define(SourceClusterFile,"./test/specs/spec.cluster").
--define(ClusterFile,"spec.cluster").
--define(SourceHostFile,"./test/specs/spec.host").
--define(HostFile,"spec.host").
--define(SourceApplicationFile,"./test/specs/spec.application").
--define(ApplicationFile,"spec.application").
+
 	 	 
 
 setup()->
