@@ -1,0 +1,75 @@
+{{deploy_name,"one_host_one_pod"},
+ {cluster_name,"test_cluster"},
+ {num_instances,2},
+ {host,{[any_host,same_host],["c100","c200","c201"]}},
+ {pod,same_pod},
+ {services,
+  [
+      {"test_add","1.0.0"},
+      {"test_divi","1.0.0"},
+      {"test_sub","1.0.0"}
+  ]
+ }
+}.
+%%---------------------------------------------------------------------
+{{deploy_name,"one_host_three_pods"},
+ {cluster_name,"test_cluster"},
+ {num_instances,2},
+  {host,{[this_host],["c100"]}},
+  {pod,not_same_pod},
+  {services,
+   [
+       {"test_add","1.0.0"},
+       {"test_divi","1.0.0"},
+       {"test_sub","1.0.0"}]
+  }
+}.
+%%---------------------------------------------------------------------
+{{deploy_name,"one_host_one_pod"},
+ {cluster_name,"test_cluster"},
+ {num_instances,2},
+ {host,{[any_host,same_host],["c100","c200","c201"]}},
+ {pod,same_pod},
+ {services,
+  [
+      {"test_add","1.0.0"},
+      {"test_divi","1.0.0"},
+      {"test_sub","1.0.0"}
+  ]
+ }
+}.
+
+%%---------------------------------------------------------------------
+
+{{deploy_name,"one_host_three_pods"},
+ {cluster_name,"test_cluster"},
+ {num_instances,2},
+ {host,{[any_host,same_host],["c100","c200","c201"]}},
+ {pod,not_same_pod},
+ {services,
+  [
+      {"test_add","1.0.0"},
+      {"test_divi","1.0.0"},
+      {"test_sub","1.0.0"}
+  ]
+ }
+}.
+
+%%---------------------------------------------------------------------
+{{deploy_name,"two_hosts_three_pods"},
+ {cluster_name,"test_cluster"},
+ {num_instances,2},
+ {host,{[any_host,not_same_host],["c100","c200","c201"]}},
+ {pod,not_same_pod},
+ {services,
+  [
+      {"test_add","1.0.0"},
+      {"test_divi","1.0.0"},
+      {"test_sub","1.0.0"}
+  ]
+ }
+}.
+
+
+%%---------------------------------------------------------------------
+
