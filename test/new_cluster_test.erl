@@ -9,7 +9,7 @@
 %%% Pod consits beams from all services, app and app and sup erl.
 %%% The setup of envs is
 %%% -------------------------------------------------------------------
--module(create_cluster_nodes).   
+-module(new_cluster_test).   
  
 -export([start/0]).
 %% --------------------------------------------------------------------
@@ -31,50 +31,9 @@
 -define(HostNames,["c100","c300","c200","c201"]).
 -define(HostName,"c100").
 -define(ClusterName,"test_cluster").
+-define(Cookie,"test_cluster_cookie").
 -define(DeplName,"any_not_same_hosts_not_same_pods").
 
-start()->
-   
-    ok=setup(),
-
-    ok=create_node(),
- %   ok=copy_spec_files(),
-
-  %  ok=delete_spec_files(),
-  %  ok=delete_node(),
- %   ok=pod_candidates(),
-  
-    io:format("Test OK !!! ~p~n",[?MODULE]),
-    init:stop(),
-    ok.
-
-%% --------------------------------------------------------------------
-%% Function: available_hosts()
-%% Description: Based on hosts.config file checks which hosts are avaible
-%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
-%% --------------------------------------------------------------------
-copy_spec_files()->
-
-    io:format("Start ~p~n",[?FUNCTION_NAME]),
-
-    Cookie=config_node:cluster_cookie(?ClusterName),    
-    Node=list_to_atom(?ClusterName++"@"++?HostName),
-    
-    R1=[{FileName,dist_lib:rm_file(Node,Cookie,?DestDir,FileName)}||FileName<-?SpecFiles],
-    io:format("R1 ~p~n",[R1]),
-    R2=[{FileName,dist_lib:cp_file(Node,Cookie,?SourceDir,FileName,?DestDir)}||FileName<-?SpecFiles],
-    io:format("R2 ~p~n",[R2]),
-
-
-    io:format("Stop OK !!! ~p~n",[?FUNCTION_NAME]),
-    ok.
-    
-
-%% --------------------------------------------------------------------
-%% Function: available_hosts()
-%% Description: Based on hosts.config file checks which hosts are avaible
-%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
-%% --------------------------------------------------------------------
 -define(SourceDepFile,"./test/specs/spec.deployment").
 -define(DepFile,"spec.deployment").
 -define(SourceClusterFile,"./test/specs/spec.cluster").
@@ -85,64 +44,62 @@ copy_spec_files()->
 -define(ApplicationFile,"spec.application").
 -define(LogDir,"logs").
 
-create_node()->
-    io:format("Start ~p~n",[?FUNCTION_NAME]),
+start()->
+   
+    ok=setup(),
+
+    ok=new(),
+    ok=delete(),
     
-    Cookie=config_node:cluster_cookie(?ClusterName),    
-    ClusterNode=list_to_atom(?ClusterName++"@"++?HostName),
-    NodeName=?ClusterName,
-    ClusterDir=config_node:cluster_dir(?ClusterName),
-    PaArgs=" ",
-    EnvArgs=" -detached ",
+    
     
 
-    %% Create node and dir                  
-                                             
-    {ok,ClusterNode,ClusterDir}=misc_cluster:create_node_dir(?HostName,?ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs),
-    
-    %% copy specs
-    [
-     {"spec.application",{error,[eexists,"./spec.application"]}},
-     {"spec.cluster",{error,[eexists,"./spec.cluster"]}},
-     {"spec.deployment",{error,[eexists,"./spec.deployment"]}},
-     {"spec.host",{error,[eexists,"./spec.host"]}}
-    ]=lists:sort([{FileName,dist_lib:rm_file(ClusterNode,Cookie,?DestDir,FileName)}||FileName<-?SpecFiles]),
-    
-    SpecDir=ClusterDir,
-    [
-     {"spec.application",ok},
-     {"spec.cluster",ok},
-     {"spec.deployment",ok},
-     {"spec.host",ok}
-    ]=lists:sort([{FileName,dist_lib:cp_file(ClusterNode,Cookie,?SourceDir,FileName,SpecDir)}||FileName<-?SpecFiles]),
+    io:format("Test OK !!! ~p~n",[?MODULE]),
+    init:stop(),
+    ok.
 
-    %% application set_env
-    ConfigNodeEnv=[{config_node,[{deployment_spec,?DepFile},
-				 {cluster_spec,?ClusterFile},
-				 {host_spec,?HostFile},
-				 {application_spec,?ApplicationFile},
-				 {spec_dir,ClusterDir}]}],
-    ClusterLogDir=filename:join(ClusterDir,?LogDir),
-    NodelogEnv=[{nodelog,[{log_dir,ClusterLogDir}]}],
+%% --------------------------------------------------------------------
+%% Function: available_hosts()
+%% Description: Based on hosts.config file checks which hosts are avaible
+%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
+%% --------------------------------------------------------------------
+new()->
+     io:format("Start ~p~n",[?FUNCTION_NAME]),
 
-    []=dist_lib:cmd(ClusterNode,Cookie,application,get_all_env,[config_node],5000),
-    []=dist_lib:cmd(ClusterNode,Cookie,application,get_all_env,[nodelog],5000),
-    
-    AllEnvs=lists:append([ConfigNodeEnv,NodelogEnv]),
-    ok=dist_lib:cmd(ClusterNode,Cookie,application,set_env,[AllEnvs],5000),
     [
-     {application_spec,"spec.application"},
-     {cluster_spec,"spec.cluster"},
-     {deployment_spec,"spec.deployment"},
-     {host_spec,"spec.host"},
-     {spec_dir,"test_cluster.dir"}
-    ]=lists:sort(dist_lib:cmd(ClusterNode,Cookie,application,get_all_env,[config_node],5000)),
+     {pong,test_cluster@c100,test_cluster@c200,"test_cluster.dir"},
+     {pong,test_cluster@c100,test_cluster@c201,"test_cluster.dir"},
+     {pong,test_cluster@c200,test_cluster@c201,"test_cluster.dir"}
+    ]=lists:sort(ops_node:new_cluster(?ClusterName)),
     
+    Node=list_to_atom(?ClusterName++"@"++?HostName),
     [
-     {log_dir,"test_cluster.dir/logs"}
-    ]=lists:sort(dist_lib:cmd(ClusterNode,Cookie,application,get_all_env,[nodelog],5000)),
+     test_cluster@c100,
+     test_cluster@c200,
+     test_cluster@c201
+    ]=lists:sort([dist_lib:cmd(Node,?Cookie,erlang,node,[],4000)|dist_lib:cmd(Node,?Cookie,erlang,nodes,[],4000)]),
     
+   % io:format("X ~p~n",[{X,?MODULE,?FUNCTION_NAME}]),
     
+    io:format("Stop OK !!! ~p~n",[?FUNCTION_NAME]),
+    ok.
+
+
+%% --------------------------------------------------------------------
+%% Function: available_hosts()
+%% Description: Based on hosts.config file checks which hosts are avaible
+%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
+%% --------------------------------------------------------------------
+delete()->
+     io:format("Start ~p~n",[?FUNCTION_NAME]),
+
+    [
+     {ok,"c100","test_cluster"},
+     {ok,"c200","test_cluster"},
+     {ok,"c201","test_cluster"}
+    ]=lists:sort(ops_node:delete_cluster(?ClusterName)),
+
+    io:format("Stop OK !!! ~p~n",[?FUNCTION_NAME]),
     
 
     io:format("Stop OK !!! ~p~n",[?FUNCTION_NAME]),
@@ -197,8 +154,7 @@ delete_node()->
 %% Description: Based on hosts.config file checks which hosts are avaible
 %% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
 %% --------------------------------------------------------------------
-
-	 	 
+ 	 
 
 setup()->
     io:format("Start ~p~n",[?FUNCTION_NAME]),
@@ -218,16 +174,20 @@ setup()->
     file:delete(?ApplicationFile),
     {ok,ApplBin}=file:read_file(?SourceApplicationFile),
     ok=file:write_file(?ApplicationFile,ApplBin),
+
+    OpsNodeEnv=[{ops_node,[{deployment_spec,?DepFile},
+				 {cluster_spec,?ClusterFile},
+				 {host_spec,?HostFile},
+				 {application_spec,?ApplicationFile},
+				 {spec_dir,"."}]}],
+   
+    ok=application:set_env(OpsNodeEnv),
  
     ok=application:start(common),
     pong=common:ping(),
-    ok=application:start(config_node),
-    pong=config_node:ping(),
+    
     ok=application:start(ops_node),
     pong=ops_node:ping(),
-
-    misc_cluster:delete_cluster_node(?HostName,?ClusterName),
-    
 
     io:format("Stop OK !!! ~p~n",[?FUNCTION_NAME]),
 

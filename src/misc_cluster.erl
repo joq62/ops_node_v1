@@ -12,8 +12,10 @@
 -module(misc_cluster).   
  
 -export([
-	 create_cluster_node/2,
-	 delete_cluster_node/2,
+	 new/1,
+	 delete/1,
+	 create_node_dir/7,
+
 	 is_cluster_node_present/3,
 	 cluster_names/1,
 	 cluster_intent/1,
@@ -39,15 +41,91 @@
 %% num_instances
 %% Services must not be loaded on the pod (conflict)
 %% 
+%% --------------------------------------------------------------------
+%% Function: available_hosts()
+%% Description: Based on hosts.config file checks which hosts are avaible
+%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
+%% -------------------------------------------------------------------
+delete(ClusterName)->
+    [{delete(HostName,ClusterName),HostName,ClusterName}||HostName<-config_node:cluster_hostnames(ClusterName)].
 
-%%
-
-%%
-pod_candidates(Constraints,ClusterSpec)->
+delete(HostName,ClusterName)->
+    NodeName=ClusterName,
+    ClusterNode=list_to_atom(NodeName++"@"++HostName),
+    Cookie=config_node:cluster_cookie(ClusterName),   
+    ClusterDir=config_node:cluster_dir(ClusterName),
     
-    {not_implmented,Constraints,ClusterSpec}.
+    dist_lib:rmdir_r(ClusterNode,Cookie,ClusterDir),
+
+    Result= case dist_lib:cmd(ClusterNode,Cookie,filelib,is_dir,[ClusterDir],5000) of
+		true->
+		    {error,[couldnt_delete_dir,ClusterDir]};
+		{badrpc,Reason}->
+		    {error,[badrpc,Reason,ClusterDir]};
+		false->
+		    case dist_lib:stop_node(HostName,NodeName,Cookie) of
+			false->
+			    {error,[couldnt_kill_vm,list_to_atom(NodeName++"@"++HostName)]};
+			true->
+			    ok
+		    end
+	    end,
+    Result.
 
 
+
+%% --------------------------------------------------------------------
+%% Function:start/0 
+%% Description: Initiate the eunit tests, set upp needed processes etc
+%% Returns: non
+%% -------------------------------------------------------------------
+new(ClusterName)->
+    NodeName=ClusterName,
+    Cookie=config_node:cluster_cookie(ClusterName),
+    ClusterDir=config_node:cluster_dir(ClusterName),
+    HostNameList=config_node:cluster_hostnames(ClusterName),
+    PaArgs=" -pa "++ClusterDir,
+    EnvArgs=" -detached ",
+    create_node_dirs(HostNameList,ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs).
+
+
+create_node_dirs([HostName|T],ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs)->
+    create_node_dirs([HostName|T],ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs,[]).
+
+create_node_dirs([],_ClusterName,Cookie,_NodeName,_ClusterDir,_PaArgs,_EnvArgs,Acc)->
+    [{dist_lib:cmd(Node1,Cookie,net_adm,ping,[Node2],3000),Node1,Node2,ClusterDir1}||{ok,Node1,ClusterDir1}<-Acc,
+									       {ok,Node2,ClusterDir2}<-Acc,
+									       Node1<Node2];							   
+create_node_dirs([HostName|T],ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs,Acc)->
+    Result=create_node_dir(HostName,ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs),
+    create_node_dirs(T,ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs,[Result|Acc]).  
+
+
+%% --------------------------------------------------------------------
+%% Function:start/0 
+%% Description: Initiate the eunit tests, set upp needed processes etc
+%% Returns: non
+%% -------------------------------------------------------------------
+create_node_dir(HostName,ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs)->
+    Result=case dist_lib:stop_node(HostName,NodeName,Cookie) of
+	       false->
+		   {error,[couldnt_kill_vm,list_to_atom(NodeName++"@"++HostName)]};
+	       true->
+		   case dist_lib:start_node(HostName,NodeName,Cookie,EnvArgs) of
+		       {error,Reason}->
+			   {error,Reason};
+		       {ok,ClusterNode}->
+			   dist_lib:rmdir_r(ClusterNode,Cookie,ClusterDir),
+			   timer:sleep(3000),
+			   case dist_lib:mkdir(ClusterNode,Cookie,ClusterDir) of
+			       {error,Reason}->
+				   {error,Reason};
+			       ok->
+				   {ok,ClusterNode,ClusterDir}
+			   end
+		   end
+	   end,
+    Result.
 
 
 
@@ -170,46 +248,6 @@ cluster_names(ClusterSpec)->
     HostClusterNameList.
 
 
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-
-create_cluster_node(HostName,ClusterName)->
-    NodeName=ClusterName,
-    Cookie=config_node:cluster_cookie(ClusterName),    
-    ClusterDir=config_node:cluster_dir(ClusterName),
-    PaArgs=" ",
-    EnvArgs=" -detached ",
-
-    Result=case dist_lib:stop_node(HostName,NodeName,Cookie) of
-	       false->
-		    {error,[couldnt_kill_vm,list_to_atom(NodeName++"@"++HostName)]};
-	       true->
-		   case dist_lib:start_node(HostName,NodeName,Cookie,EnvArgs) of
-		       {error,Reason}->
-			   {error,Reason};
-		       {ok,ClusterNode}->
-			   dist_lib:rmdir_r(ClusterNode,Cookie,ClusterDir),
-			   timer:sleep(3000),
-			   case dist_lib:mkdir(ClusterNode,Cookie,ClusterDir) of
-			       {error,Reason}->
-				   {error,Reason};
-			       ok->
-				   case start_cluster_node_services(?ClusterNodeServices,ClusterNode,Cookie,ClusterDir) of
-				       {error,Reason}->
-					   {error,Reason};
-				       StartList-> 
-					   {ok,ClusterNode,ClusterDir,StartList}
-				   end;
-			       UnMatched ->
-				   io:format("UnMatched ~p~n",[{UnMatched,?MODULE,?LINE,?FUNCTION_NAME}]),
-				   {error,[unmatched,UnMatched]}
-			   end
-		   end
-	   end,
-    Result.
 
 %% --------------------------------------------------------------------
 %% Function: available_hosts()
@@ -250,35 +288,6 @@ start_cluster_node_services([Service|T],ClusterNode,Cookie,ClusterDir,Acc)->
 		   end
 	   end,
     start_cluster_node_services(T,ClusterNode,Cookie,ClusterDir,[Result|Acc]).
-
-
-%% --------------------------------------------------------------------
-%% Function: available_hosts()
-%% Description: Based on hosts.config file checks which hosts are avaible
-%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
-%% -------------------------------------------------------------------
-delete_cluster_node(HostName,ClusterName)->
-    NodeName=ClusterName,
-    ClusterNode=list_to_atom(NodeName++"@"++HostName),
-    Cookie=config_node:cluster_cookie(ClusterName),   
-    ClusterDir=config_node:cluster_dir(ClusterName),
-    
-    dist_lib:rmdir_r(ClusterNode,Cookie,ClusterDir),
-
-    Result= case dist_lib:cmd(ClusterNode,Cookie,filelib,is_dir,[ClusterDir],5000) of
-		true->
-		    {error,[couldnt_delete_dir,ClusterDir]};
-		{badrpc,Reason}->
-		    {error,[badrpc,Reason,ClusterDir]};
-		false->
-		    case dist_lib:stop_node(HostName,NodeName,Cookie) of
-			false->
-			    {error,[couldnt_kill_vm,list_to_atom(NodeName++"@"++HostName)]};
-			true->
-			    ok
-		    end
-	    end,
-    Result.
 
 
 %% --------------------------------------------------------------------

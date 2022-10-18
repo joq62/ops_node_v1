@@ -21,6 +21,9 @@
 
 %% node
 -export([
+	 new_cluster/1,
+	 delete_cluster/1,
+
 	 create_cluster_node/2,
 	 delete_cluster_node/2,
 	 is_cluster_node_present/2,
@@ -78,11 +81,14 @@
 -export([init/1, handle_call/3,handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %%-------------------------------------------------------------------
--record(state,{
-	       cluster_spec,
-	       deployment_spec
+-record(state, {
+		all_spec,
+		application_spec,
+		cluster_spec,
+		deployment_spec,
+		host_spec,
+		spec_dir
 	       }).
-
 
 %% ====================================================================
 %% External functions
@@ -90,6 +96,13 @@
 
 appl_start([])->
     application:start(?MODULE).
+%% --------------------------------------------------------------------
+new_cluster(ClusterName)->
+    gen_server:call(?MODULE,{new_cluster,ClusterName},infinity). 
+delete_cluster(ClusterName)->
+    gen_server:call(?MODULE,{delete_cluster,ClusterName},infinity). 
+
+
 %% --------------------------------------------------------------------
 create_cluster_node(HostName,ClusterName)->
     gen_server:call(?MODULE,{create_cluster_node,HostName,ClusterName},infinity).   
@@ -168,11 +181,30 @@ ping()->
 %%          {stop, Reason}
 %% --------------------------------------------------------------------
 init([]) ->
+    AllSpec=application:get_all_env(?MODULE),
+    {application_spec,ApplicationSpec}=lists:keyfind(application_spec,1,AllSpec),
+    {cluster_spec,ClusterSpec}=lists:keyfind(cluster_spec,1,AllSpec),
+    {deployment_spec,DeploymentSpec}=lists:keyfind(deployment_spec,1,AllSpec),
+    {host_spec,HostSpec}=lists:keyfind(host_spec,1,AllSpec),
+    {spec_dir,SpecDir}=lists:keyfind(spec_dir,1,AllSpec),
+
     
-       
-    {ok, #state{cluster_spec=[],
-		deployment_spec=[]}}.   
- 
+    ConfigNodeEnv=[{config_node,[{deployment_spec,DeploymentSpec},
+				 {cluster_spec,ClusterSpec},
+				 {host_spec,HostSpec},
+				 {application_spec,ApplicationSpec},
+				 {spec_dir,SpecDir}]}],
+    ok=application:set_env(ConfigNodeEnv),
+    ok=application:start(config_node),
+    pong=config_node:ping(),
+    
+    {ok, #state{
+	    all_spec=AllSpec,
+	    application_spec=ApplicationSpec,
+	    cluster_spec=ClusterSpec,
+	    deployment_spec=DeploymentSpec,
+	    host_spec=HostSpec,
+	    spec_dir=SpecDir}}.
 
 %% --------------------------------------------------------------------
 %% Function: handle_call/3
@@ -184,6 +216,16 @@ init([]) ->
 %%          {stop, Reason, Reply, State}   | (terminate/2 is called)
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
+
+handle_call({new_cluster,ClusterName},_From, State) ->
+    Reply=rpc:call(node(),misc_cluster,new,[ClusterName],5*5000),
+    {reply, Reply, State};
+
+handle_call({delete_cluster,ClusterName},_From, State) ->
+    Reply=rpc:call(node(),misc_cluster,delete,[ClusterName],5*5000),
+    {reply, Reply, State};
+
+
 
 handle_call({git_load_service,HostName,ClusterName,PodName,Service},_From, State) ->
     Reply=ops_misc:git_load_service(HostName,ClusterName,PodName,Service,State#state.cluster_spec),
