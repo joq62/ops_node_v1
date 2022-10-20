@@ -37,7 +37,8 @@ eunit:
 	rm -rf rebar.lock;
 	rm -rf Mnesia.*;
 	rm -rf ebin;
-	rm -rf *.application *.cluster *.deployment *.host;
+	rm -rf test/specs/spec.*;
+	cp /home/joq62/erlang/infra_2/specs/spec.* test/specs;
 	mkdir test_ebin;
 	mkdir ebin;
 	rebar3 compile;

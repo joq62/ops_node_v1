@@ -25,7 +25,15 @@
 	{name,"nodelog"},
 	{vsn,["0.1.0"]},
 	{app,nodelog},
-	{gitpath,"https://github.com/joq62/node.git"}
+	{gitpath,"https://github.com/joq62/nodelog.git"}
+].
+%%----------------------------------------------------------------------------- 
+
+[
+	{name,"cluster_node"},
+	{vsn,["0.1.0"]},
+	{app,cluster_node},
+	{gitpath,"https://github.com/joq62/cluster_node.git"}
 ].
 
 %%----------------------------------------------------------------------------- 

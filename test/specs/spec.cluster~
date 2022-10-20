@@ -1,7 +1,7 @@
 %%--------------------- Start of File -----------------------------------------
 [
 	{name,"test_cluster"},
-	{cookie,"test_cluster_cookie"},
+	{cookie,"test_cluster"},
 	{connect_name,"test_cluster_0"},
 	{pod_names,["test_cluster_1",
 		   "test_cluster_2",

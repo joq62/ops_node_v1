@@ -1,1 +1,8 @@
-[].
+[{<<"common">>,
+  {git,"https://github.com/joq62/common.git",
+       {ref,"8384df00b313592a00462176e7aacba7be81e455"}},
+  0},
+ {<<"config_node">>,
+  {git,"https://github.com/joq62/config_node.git",
+       {ref,"9a17b8f92b151fe37c81af0d0355dc5767610abb"}},
+  0}].

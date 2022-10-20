@@ -12,14 +12,10 @@
 -module(misc_cluster).   
  
 -export([
-	 new/1,
-	 delete/1,
-	 create_node_dir/7,
 
-	 is_cluster_node_present/3,
-	 cluster_names/1,
-	 cluster_intent/1,
-	 cluster_intent/2
+	 create_connect_nodes/2,
+	 create_cluster_node/2
+
 
 	]).
 
@@ -46,259 +42,49 @@
 %% Description: Based on hosts.config file checks which hosts are avaible
 %% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
 %% -------------------------------------------------------------------
-delete(ClusterName)->
-    [{delete(HostName,ClusterName),HostName,ClusterName}||HostName<-config_node:cluster_hostnames(ClusterName)].
-
-delete(HostName,ClusterName)->
-    NodeName=ClusterName,
-    ClusterNode=list_to_atom(NodeName++"@"++HostName),
-    Cookie=config_node:cluster_cookie(ClusterName),   
-    ClusterDir=config_node:cluster_dir(ClusterName),
-    
-    dist_lib:rmdir_r(ClusterNode,Cookie,ClusterDir),
-
-    Result= case dist_lib:cmd(ClusterNode,Cookie,filelib,is_dir,[ClusterDir],5000) of
-		true->
-		    {error,[couldnt_delete_dir,ClusterDir]};
-		{badrpc,Reason}->
-		    {error,[badrpc,Reason,ClusterDir]};
-		false->
-		    case dist_lib:stop_node(HostName,NodeName,Cookie) of
-			false->
-			    {error,[couldnt_kill_vm,list_to_atom(NodeName++"@"++HostName)]};
-			true->
-			    ok
-		    end
-	    end,
-    Result.
-
-
-
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-new(ClusterName)->
-    NodeName=ClusterName,
+create_connect_nodes(ClusterName,TimeOut)->
     Cookie=config_node:cluster_cookie(ClusterName),
-    ClusterDir=config_node:cluster_dir(ClusterName),
+    NodeName=config_node:cluster_connect_name(ClusterName),
     HostNameList=config_node:cluster_hostnames(ClusterName),
-    PaArgs=" -pa "++ClusterDir,
+    PaArgs="  ",
     EnvArgs=" -detached ",
-    create_node_dirs(HostNameList,ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs).
-
-
-create_node_dirs([HostName|T],ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs)->
-    create_node_dirs([HostName|T],ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs,[]).
-
-create_node_dirs([],_ClusterName,Cookie,_NodeName,_ClusterDir,_PaArgs,_EnvArgs,Acc)->
-    [{dist_lib:cmd(Node1,Cookie,net_adm,ping,[Node2],3000),Node1,Node2,ClusterDir1}||{ok,Node1,ClusterDir1}<-Acc,
-									       {ok,Node2,ClusterDir2}<-Acc,
-									       Node1<Node2];							   
-create_node_dirs([HostName|T],ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs,Acc)->
-    Result=create_node_dir(HostName,ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs),
-    create_node_dirs(T,ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs,[Result|Acc]).  
-
-
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-create_node_dir(HostName,ClusterName,Cookie,NodeName,ClusterDir,PaArgs,EnvArgs)->
-    Result=case dist_lib:stop_node(HostName,NodeName,Cookie) of
-	       false->
-		   {error,[couldnt_kill_vm,list_to_atom(NodeName++"@"++HostName)]};
-	       true->
-		   case dist_lib:start_node(HostName,NodeName,Cookie,EnvArgs) of
-		       {error,Reason}->
-			   {error,Reason};
-		       {ok,ClusterNode}->
-			   dist_lib:rmdir_r(ClusterNode,Cookie,ClusterDir),
-			   timer:sleep(3000),
-			   case dist_lib:mkdir(ClusterNode,Cookie,ClusterDir) of
-			       {error,Reason}->
-				   {error,Reason};
-			       ok->
-				   {ok,ClusterNode,ClusterDir}
-			   end
-		   end
-	   end,
-    Result.
-
-
-
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-git_load_service(HostName,ClusterName,PodName,Service,ClusterSpec)->
-    service_lib:git_load(HostName,ClusterName,PodName,Service,ClusterSpec).
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-load_service(_HostName,_ClusterName,_PodName,_Service,_ClusterSpec)->
-    not_implemented.
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-start_service(HostName,ClusterName,PodName,Service,ClusterSpec)->
-    service_lib:start(HostName,ClusterName,PodName,Service,ClusterSpec).
     
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-stop_service(HostName,ClusterName,PodName,Service,ClusterSpec)->
-    service_lib:stop(HostName,ClusterName,PodName,Service,ClusterSpec).
+    {StartResult,Ping}=connect_node(HostNameList,ClusterName,Cookie,NodeName,PaArgs,EnvArgs,TimeOut),
+    {StartResult,Ping}.
     
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% ------------------------------------------------------------------- 
-unload_service(HostName,ClusterName,PodName,Service,ClusterSpec)->
-    service_lib:unload(HostName,ClusterName,PodName,Service,ClusterSpec).
-    
+connect_node(HostNameList,ClusterName,Cookie,NodeName,PaArgs,EnvArgs,TimeOut)->
+    connect_node(HostNameList,ClusterName,Cookie,NodeName,PaArgs,EnvArgs,TimeOut,[]).
 
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-is_service_running(HostName,ClusterName,PodName,Service,ClusterSpec)->
-    service_lib:is_running(HostName,ClusterName,PodName,Service,ClusterSpec).
-
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-is_service_loaded(HostName,ClusterName,PodName,Service,ClusterSpec)->
-    service_lib:is_loaded(HostName,ClusterName,PodName,Service,ClusterSpec).
-
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-pod_intent(ClusterSpec)->
-    pod_lib:intent(ClusterSpec).
-
-pod_intent(WantedClusterName,ClusterSpec)->
-    pod_lib:intent(WantedClusterName,ClusterSpec).
-    
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-pod_name_dir_list(HostName,ClusterName,ClusterSpec)->
-    pod_data:name_dir_list(HostName,ClusterName,ClusterSpec).
-    
-%%--------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-
-create_pod_node(HostName,ClusterName,PodName,ClusterSpec)->
-    pod_lib:start_node(HostName,ClusterName,PodName,ClusterSpec).
-
-%% --------------------------------------------------------------------
-%% Function: available_hosts()
-%% Description: Based on hosts.config file checks which hosts are avaible
-%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
-%% -------------------------------------------------------------------
-delete_pod_node(HostName,ClusterName,PodName,ClusterSpec)->
-    cluster_lib:stop_node(HostName,ClusterName,PodName,ClusterSpec).
-
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-is_pod_node_present(HostName,ClusterName,PodName,ClusterSpec)->
-    pod_lib:is_node_present(HostName,ClusterName,PodName,ClusterSpec).
-
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-cluster_intent(ClusterSpec)->
-    cluster_lib:intent(ClusterSpec).
-
-cluster_intent(WantedClusterName,ClusterSpec)->
-    cluster_lib:intent(WantedClusterName,ClusterSpec).
-%% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
-%% -------------------------------------------------------------------
-cluster_names(ClusterSpec)->
-    HostClusterNameList=cluster_data:all_names(ClusterSpec),
-    HostClusterNameList.
-
-
-
-%% --------------------------------------------------------------------
-%% Function: available_hosts()
-%% Description: Based on hosts.config file checks which hosts are avaible
-%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
-%% -------------------------------------------------------------------
-
-start_cluster_node_services(ClusterNodeServices,ClusterNode,Cookie,ClusterDir)->
-    start_cluster_node_services(ClusterNodeServices,ClusterNode,Cookie,ClusterDir,[]).
-
-start_cluster_node_services([],_,_,_,Acc)->
-    Acc;
-start_cluster_node_services([Service|T],ClusterNode,Cookie,ClusterDir,Acc)->
-    DirToClone=filename:join(ClusterDir,Service),
-    dist_lib:rmdir_r(ClusterNode,Cookie,DirToClone),
-    Result=case dist_lib:mkdir(ClusterNode,Cookie,DirToClone) of
+connect_node([],_ClusterName,Cookie,_NodeName,_PaArgs,_EnvArgs,_TimeOut,Acc)->
+    Ping=[{ok,Node1,Node2}||{ok,_,_,Node1}<-Acc,
+			    {ok,_,_,Node2}<-Acc,
+			    Node1<Node2,
+			    pong=:=dist_lib:ping(Node1,Cookie,[Node2])],
+    {Acc,Ping};
+connect_node([HostName|T],ClusterName,Cookie,NodeName,PaArgs,EnvArgs,TimeOut,Acc)->
+ %   io:format(" ~p~n",[{?MODULE,?LINE,?FUNCTION_NAME,HostName,ClusterName,Cookie,NodeName,PaArgs,EnvArgs,TimeOut}]), 
+    Result=case ssh_vm:create(HostName,NodeName,Cookie,PaArgs,EnvArgs,TimeOut) of
 	       {error,Reason}->
 		   {error,Reason};
-	       ok->
-		   GitPath=config_node:application_gitpath(Service),
-		   case dist_lib:cmd(node(),Cookie,service,git_clone_to_dir,[ClusterNode,GitPath,DirToClone],5000) of
-		       {error,Reason}->
-			   {error,Reason};
-		       {ok,_}->
-			   Ebin=[filename:join(DirToClone,"ebin")],  % git_clone_dirs is a list!!
-			   ServiceApp=config_node:application_app(Service),
-			   case dist_lib:cmd(node(),Cookie,service,load,[ClusterNode,ServiceApp,Ebin],5000) of
-			       {error,Reason}->
-				   {error,Reason};
-			       ok->
-				   case dist_lib:cmd(node(),Cookie,service,start,[ClusterNode,ServiceApp],5000) of
-				       {error,Reason}->
-					   {error,Reason};
-				       ok->
-					   {ok,ServiceApp,DirToClone}
-				   end
-			   end
-		   end
+	       {ok,Node}->
+		   {ok,HostName,ClusterName,Node}
 	   end,
-    start_cluster_node_services(T,ClusterNode,Cookie,ClusterDir,[Result|Acc]).
+    io:format("Result ~p~n",[{?MODULE,?LINE,?FUNCTION_NAME,Result,HostName,NodeName}]), 
+    connect_node(T,ClusterName,Cookie,NodeName,PaArgs,EnvArgs,TimeOut,[Result|Acc]).
+    
 
 
 %% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
+%% Function: available_hosts()
+%% Description: Based on hosts.config file checks which hosts are avaible
+%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
 %% -------------------------------------------------------------------
-is_cluster_node_present(HostName,ClusterName,ClusterSpec)->
-    cluster_lib:is_node_present(HostName,ClusterName,ClusterSpec).
+create_cluster_node(_HostName,_ClusterName)->
+
+
+    glurk.
 %% --------------------------------------------------------------------
-%% Function:start/0 
-%% Description: Initiate the eunit tests, set upp needed processes etc
-%% Returns: non
+%% Function: available_hosts()
+%% Description: Based on hosts.config file checks which hosts are avaible
+%% Returns: List({HostId,Ip,SshPort,Uid,Pwd}
 %% -------------------------------------------------------------------

@@ -19,6 +19,11 @@
 
 %% External exports
 
+-export([
+	 create_connect_nodes/2
+
+	]).
+
 %% node
 -export([
 	 new_cluster/1,
@@ -96,6 +101,15 @@
 
 appl_start([])->
     application:start(?MODULE).
+
+
+
+
+%% --------------------------------------------------------------------
+create_connect_nodes(ClusterName,TimeOut)->
+    gen_server:call(?MODULE,{create_connect_nodes,ClusterName,TimeOut},infinity). 
+
+
 %% --------------------------------------------------------------------
 new_cluster(ClusterName)->
     gen_server:call(?MODULE,{new_cluster,ClusterName},infinity). 
@@ -217,6 +231,15 @@ init([]) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
 
+handle_call({create_connect_nodes,ClusterName,TimeOut},_From, State) ->
+    Reply=misc_cluster:create_connect_nodes(ClusterName,TimeOut),
+    {reply, Reply, State};
+
+handle_call({create_cluster_node,HostName,ClusterName},_From, State) ->
+    Reply=rpc:call(node(),misc_cluster,create_cluster_node,[HostName,ClusterName],5*5000),
+    {reply, Reply, State};
+
+
 handle_call({new_cluster,ClusterName},_From, State) ->
     Reply=rpc:call(node(),misc_cluster,new,[ClusterName],5*5000),
     {reply, Reply, State};
@@ -276,9 +299,6 @@ handle_call({cluster_names},_From, State) ->
     Reply=ops_misc:cluster_names(State#state.cluster_spec),
     {reply, Reply, State};
 
-handle_call({create_cluster_node,HostName,ClusterName},_From, State) ->
-    Reply=ops_misc:create_cluster_node(HostName,ClusterName,State#state.cluster_spec),
-    {reply, Reply, State};
 
 handle_call({delete_cluster_node,HostName,ClusterName},_From, State) ->
     Reply=ops_misc:delete_cluster_node(HostName,ClusterName,State#state.cluster_spec),
